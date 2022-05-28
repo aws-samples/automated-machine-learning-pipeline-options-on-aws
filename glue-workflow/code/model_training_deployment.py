@@ -4,8 +4,8 @@ from datetime import datetime
 from awsglue.utils import getResolvedOptions
 
 class ModelRun:
-    def __init__(self, args):
-        args = getResolvedOptions(sys.argv, ['train_input_path', 'role_arn', 'algorithm_image'])
+    def __init__(self):
+        args = getResolvedOptions(sys.argv, ['train_input_path', 'model_output_path', 'algorithm_image', 'role_arn'])
         current_time = datetime.now()
         self.train_input_path = args['train_input_path']
         self.model_output_path = args['model_output_path']
@@ -108,7 +108,7 @@ class ModelRun:
             PrimaryContainer=
             {
                 'Image': self.algorithm_image,
-                'ModelDataUrl': self.model_output_path + f"/{self.training_job_name}/output/model.tar.gz"
+                'ModelDataUrl': f"{self.model_output_path}/{self.training_job_name}/output/model.tar.gz"
             },
             ExecutionRoleArn=self.role_arn
         )

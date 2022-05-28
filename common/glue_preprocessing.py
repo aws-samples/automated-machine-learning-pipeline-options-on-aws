@@ -144,9 +144,9 @@ test_df = val.sample(frac=0.05, axis=0)
 val_df = val.drop(index=test_df.index)
 
 
-train_dir=processed_dir+"train/train.csv"
-val_dir=processed_dir+"validation/validation.csv"
-test_dir=processed_dir+"test/test.csv"
+train_dir=processed_dir+"/train/train.csv"
+val_dir=processed_dir+"/validation/validation.csv"
+test_dir=processed_dir+"/test/test.csv"
 
 train_df.to_csv(train_dir, index=False, line_terminator="")
 val_df.to_csv(val_dir, index=False, header=False, line_terminator="")

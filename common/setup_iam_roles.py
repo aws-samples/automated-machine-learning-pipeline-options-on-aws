@@ -57,7 +57,14 @@ def create_glue_role(role_name, bucket):
                             "arn:aws:logs:*:*:log-group:/aws/sagemaker/*:log-stream:aws-glue-*"
                         ],
                         "Effect": "Allow"
-                    }                    
+                    },
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "iam:PassRole"
+                        ],
+                        "Resource": "arn:aws:iam::*:role/*AmazonSageMaker*"
+                    }
                 ]
             })
         
