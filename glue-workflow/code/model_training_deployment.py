@@ -5,7 +5,7 @@ from awsglue.utils import getResolvedOptions
 
 class ModelRun:
     def __init__(self):
-        args = getResolvedOptions(sys.argv, ['train_input_path', 'model_output_path', 'algorithm_image', 'role_arn'])
+        args = getResolvedOptions(sys.argv, ['train_input_path', 'model_output_path', 'algorithm_image', 'role_arn', 'endpoint_name'])
         current_time = datetime.now()
         self.train_input_path = args['train_input_path']
         self.model_output_path = args['model_output_path']
@@ -13,8 +13,8 @@ class ModelRun:
         self.role_arn = args['role_arn']
         timestamp_suffix = str(current_time.month) + "-" + str(current_time.day) + "-" + str(current_time.hour) + "-" + str(current_time.minute)
         self.training_job_name = 'gw-xgb-churn-pred' + timestamp_suffix
-        self.endpoint = 'gw-xgb-churn-pred-endpoint' + timestamp_suffix
-    
+        self.endpoint = args['endpoint_name']
+        
     def create_training_job(self):
         print("Started training job...")
         
@@ -96,7 +96,32 @@ class ModelRun:
             print('Training job {} failed with the following error: {}'.format(self.training_job_name, message))
             raise Exception('Creation of sagemaker Training job failed')
         return status
-            
+
+    def create_batch_transform_job(self):
+        batch_job_name = self.batch_transform_job_name
+        model_name = self.model_name
+        inference_output_location = self.inference_output_location
+        inference_input_location = self.inference_input_location
+        
+        request = {
+            "TransformJobName": batch_job_name,
+            "ModelName": model_name,
+            "TransformOutput": {
+                "S3OutputPath": inference_output_location,
+                "Accept": "text/csv",
+                "AssembleWith": "Line",
+            },
+            "TransformInput": {
+                "DataSource": {"S3DataSource": {"S3DataType": "S3Prefix", "S3Uri": inference_input_location}},
+                "ContentType": "text/csv",
+                "SplitType": "Line",
+                "CompressionType": "None",
+            },
+            "TransformResources": {"InstanceType": "ml.m5.xlarge", "InstanceCount": 1},
+        }
+        sagemaker.create_transform_job(**request)
+        print("Created Transform job with name: ", batch_job_name)
+
 
     def create_endpoint_config(self):
 
@@ -162,7 +187,7 @@ if __name__ == '__main__':
 
     # Describe training job
     status = obj.describe_training_job()
-
+    
     # Create endpoint conf
     resp = obj.create_endpoint_config()
 
