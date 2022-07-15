@@ -97,32 +97,6 @@ class ModelRun:
             raise Exception('Creation of sagemaker Training job failed')
         return status
 
-    def create_batch_transform_job(self):
-        batch_job_name = self.batch_transform_job_name
-        model_name = self.model_name
-        inference_output_location = self.inference_output_location
-        inference_input_location = self.inference_input_location
-        
-        request = {
-            "TransformJobName": batch_job_name,
-            "ModelName": model_name,
-            "TransformOutput": {
-                "S3OutputPath": inference_output_location,
-                "Accept": "text/csv",
-                "AssembleWith": "Line",
-            },
-            "TransformInput": {
-                "DataSource": {"S3DataSource": {"S3DataType": "S3Prefix", "S3Uri": inference_input_location}},
-                "ContentType": "text/csv",
-                "SplitType": "Line",
-                "CompressionType": "None",
-            },
-            "TransformResources": {"InstanceType": "ml.m5.xlarge", "InstanceCount": 1},
-        }
-        sagemaker.create_transform_job(**request)
-        print("Created Transform job with name: ", batch_job_name)
-
-
     def create_endpoint_config(self):
 
         endpoint_name = self.endpoint
