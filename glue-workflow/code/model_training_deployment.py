@@ -1,11 +1,14 @@
 import boto3
 import sys
 from datetime import datetime
-from awsglue.utils import getResolvedOptions
+# todo
+# from awsglue.utils import getResolvedOptions
 
 class ModelRun:
-    def __init__(self):
-        args = getResolvedOptions(sys.argv, ['train_input_path', 'model_output_path', 'algorithm_image', 'role_arn', 'endpoint_name'])
+
+    def __init__(self, args):
+        # todo
+        # args = getResolvedOptions(sys.argv, ['train_input_path', 'model_output_path', 'algorithm_image', 'role_arn', 'endpoint_name'])
         current_time = datetime.now()
         self.train_input_path = args['train_input_path']
         self.model_output_path = args['model_output_path']
@@ -148,12 +151,40 @@ class ModelRun:
             print('Test Endpoint {} creation failed with the following error: {}'.format(self.endpoint, message))
             raise Exception('Endpoint creation failed')
         return status
+
+    
+    def create_batch_transform_job(self):
+        batch_job_name = self.batch_transform_job_name
+        model_name = self.model_name
+        inference_output_location = self.inference_output_location
+        inference_input_location = self.inference_input_location
         
+        request = {
+            "TransformJobName": batch_job_name,
+            "ModelName": model_name,
+            "TransformOutput": {
+                "S3OutputPath": inference_output_location,
+                "Accept": "text/csv",
+                "AssembleWith": "Line",
+            },
+            "TransformInput": {
+                "DataSource": {"S3DataSource": {"S3DataType": "S3Prefix", "S3Uri": inference_input_location}},
+                "ContentType": "text/csv",
+                "SplitType": "Line",
+                "CompressionType": "None",
+            },
+            "TransformResources": {"InstanceType": "ml.m5.xlarge", "InstanceCount": 1},
+        }
+        sagemaker.create_transform_job(**request)
+        print("Created Transform job with name: ", batch_job_name)
+        
+    
 if __name__ == '__main__':
 
     # Configure SDK to sagemaker
-    sagemaker = boto3.client('sagemaker')
+    sagemaker = boto3.client('sagemaker')    
     s3 = boto3.resource('s3')
+
     obj = ModelRun()
 
     # Create training job
@@ -161,7 +192,7 @@ if __name__ == '__main__':
 
     # Describe training job
     status = obj.describe_training_job()
-    
+
     # Create endpoint conf
     resp = obj.create_endpoint_config()
 
