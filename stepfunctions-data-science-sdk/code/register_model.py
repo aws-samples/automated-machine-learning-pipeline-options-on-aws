@@ -46,7 +46,7 @@ def lambda_handler(event, context):
         create_model_package_input_dict = {
             "ModelPackageGroupName" : model_package_group_name,
             "ModelPackageDescription" : "Custom churn prediction",
-            "ModelApprovalStatus" : "PendingManualApproval"
+            "ModelApprovalStatus" : "Approved"
         }
         create_model_package_input_dict.update(modelpackage_inference_specification)
 
