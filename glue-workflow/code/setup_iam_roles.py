@@ -46,6 +46,13 @@ def create_glue_role(role_name, bucket):
                         "Resource": "*"
                     },
                     {
+                        "Effect": "Allow",
+                        "Action": "cloudwatch:PutMetricData",
+                        "Resource": [
+                            "*"
+                        ]
+                    },
+                    {
                         "Action": [
                             "logs:CreateLogStream",
                             "logs:DescribeLogStreams",
@@ -53,8 +60,7 @@ def create_glue_role(role_name, bucket):
                             "logs:CreateLogGroup"
                         ],
                         "Resource": [
-                            "arn:aws:logs:*:*:log-group:/aws/sagemaker/*",
-                            "arn:aws:logs:*:*:log-group:/aws/sagemaker/*:log-stream:aws-glue-*"
+                            "*"
                         ],
                         "Effect": "Allow"
                     },
@@ -64,6 +70,13 @@ def create_glue_role(role_name, bucket):
                             "iam:PassRole"
                         ],
                         "Resource": "arn:aws:iam::*:role/*AmazonSageMaker*"
+                    },
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "glue:GetWorkflowRunProperties"
+                        ],
+                        "Resource": "*"
                     }
                 ]
             })
