@@ -1,0 +1,586 @@
+Resources:
+  executesfnfunctionServiceRole882AF466:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - Fn::Join:
+            - ""
+            - - "arn:"
+              - Ref: AWS::Partition
+              - :iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+    Metadata:
+      aws:cdk:path: CfnStack/execute_sfn_function/ServiceRole/Resource
+  executesfnfunctionServiceRoleDefaultPolicy899E17FC:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action: states:StartExecution
+            Effect: Allow
+            Resource: arn:aws:states:us-east-1:822507008821:stateMachine:*
+          - Action: sagemaker:SendPipelineExecutionStepFailure
+            Effect: Allow
+            Resource: arn:aws:sagemaker:us-east-1:822507008821:pipeline/*
+          - Action:
+              - sqs:DeleteMessage
+              - sqs:GetQueueAttributes
+              - sqs:ReceiveMessage
+            Effect: Allow
+            Resource: arn:aws:sqs:us-east-1:822507008821:*
+        Version: "2012-10-17"
+      PolicyName: executesfnfunctionServiceRoleDefaultPolicy899E17FC
+      Roles:
+        - Ref: executesfnfunctionServiceRole882AF466
+    Metadata:
+      aws:cdk:path: CfnStack/execute_sfn_function/ServiceRole/DefaultPolicy/Resource
+  executesfnfunction27F86BB6:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          import os
+          import json
+          import boto3
+          from boto3.dynamodb.conditions import Key, Attr
+          from botocore.exceptions import ClientError
+          from decimal import Decimal
+          import time
+          from datetime import date, datetime
+
+          import logging
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+          logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
+
+          # Retrieve state machine ARN
+          #sm_arn = os.environ['state_machine_arn']
+
+          # Create a client for the AWS Analytical service to use
+          client = boto3.client('stepfunctions')
+
+          sagemaker = boto3.client('sagemaker')
+          s3 = boto3.client('s3')
+
+          def datetimeconverter(o):
+              if isinstance(o, dt.datetime):
+                  return o.__str__()
+                  
+          def json_serial(obj):
+              """JSON serializer for objects not serializable by default"""
+              if isinstance(obj, (datetime, date)):
+                  return obj.isoformat()
+              raise TypeError("Type %s not serializable" % type(obj))
+
+          def lambda_handler(event, context):
+              """Calls custom job waiter developed by user
+
+              Arguments:
+                  event {dict} -- Dictionary with details on previous processing step
+                  context {dict} -- Dictionary with details on Lambda context
+
+              Returns:
+                  {dict} -- Dictionary with Processed Bucket, Key(s) and Job Details
+              """
+              try:
+
+                  logger.info('Lambda event is [{}]'.format(event))
+                  # Note: For simplicity, parameters "target_job" 
+                  # and "target_ddb" are hardcoded values defined during deployment of thhe pipeline.
+                  # Other parameters can be dynamically retrieved
+                  for record in event['Records']:
+                      payload = json.loads(record["body"])
+                      print('payload: ', payload)
+                      token = payload["token"]
+                      arguments = payload["arguments"]
+                      target_job = arguments["targetJob"]
+                      processed_dir = arguments["processedDir"]
+                      input_dir = arguments['inputDir']
+                      sm_arn = arguments["stateMachineArn"]
+                      
+                      logger.info('Trigger execution of state machine [{}]'.format(sm_arn))
+
+                      # Prepare input to state machine
+                      message = {
+                          'statusCode': 200,
+                          'body': {
+                              "targetJob": target_job,
+                              "processedDir": processed_dir,
+                              'inputDir': input_dir,
+                              "token": token
+                          }
+                      }
+
+                      logger.info('Input Message is [{}]'.format(message))
+
+                      client.start_execution(stateMachineArn=sm_arn,input=json.dumps(message, default=json_serial))
+
+              except Exception as e:
+                  logger.error("Fatal error", exc_info=True)
+                  sagemaker.send_pipeline_execution_step_failure(
+                      CallbackToken=token,
+                      FailureReason="Fatal error"
+                  )
+                  raise e
+              return 200
+      Role:
+        Fn::GetAtt:
+          - executesfnfunctionServiceRole882AF466
+          - Arn
+      Handler: index.lambda_handler
+      Runtime: python3.8
+      Timeout: 300
+    DependsOn:
+      - executesfnfunctionServiceRoleDefaultPolicy899E17FC
+      - executesfnfunctionServiceRole882AF466
+    Metadata:
+      aws:cdk:path: CfnStack/execute_sfn_function/Resource
+  executegluejobfunctionServiceRole36C63F84:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - Fn::Join:
+            - ""
+            - - "arn:"
+              - Ref: AWS::Partition
+              - :iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+    Metadata:
+      aws:cdk:path: CfnStack/execute_glue_job_function/ServiceRole/Resource
+  executegluejobfunctionServiceRoleDefaultPolicy244806D1:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action: glue:StartJobRun
+            Effect: Allow
+            Resource: arn:aws:glue:us-east-1:822507008821:job/*
+          - Action: sagemaker:SendPipelineExecutionStepFailure
+            Effect: Allow
+            Resource: arn:aws:sagemaker:us-east-1:822507008821:pipeline/*
+        Version: "2012-10-17"
+      PolicyName: executegluejobfunctionServiceRoleDefaultPolicy244806D1
+      Roles:
+        - Ref: executegluejobfunctionServiceRole36C63F84
+    Metadata:
+      aws:cdk:path: CfnStack/execute_glue_job_function/ServiceRole/DefaultPolicy/Resource
+  executegluejobfunction864DA305:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          import os
+          import json
+          import boto3
+          from boto3.dynamodb.conditions import Key, Attr
+          from botocore.exceptions import ClientError
+          from decimal import Decimal
+          import time
+          import datetime as dt
+
+          import logging
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+          logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
+
+          # Create a client for the AWS Analytical service to use
+          client = boto3.client('glue')
+
+          sagemaker = boto3.client('sagemaker')
+
+          def datetimeconverter(o):
+              if isinstance(o, dt.datetime):
+                  return o.__str__()
+
+          def lambda_handler(event, context):
+              """Calls custom job waiter developed by user
+
+              Arguments:
+                  event {dict} -- Dictionary with details on previous processing step
+                  context {dict} -- Dictionary with details on Lambda context
+
+              Returns:
+                  {dict} -- Dictionary with Processed Bucket, Key(s) and Job Details
+              """
+              try:
+
+                  logger.info('Lambda event is [{}]'.format(event))
+                  
+                  logger.info(event['body'])
+                  job_name = event['body']['targetJob']
+                  processed_dir = event['body']['processedDir']
+                  input_dir = event['body']['inputDir']
+                  token = event['body']['token']
+
+                  # Submitting a new Glue Job
+                  job_response = client.start_job_run(
+                      JobName=job_name,
+                      Arguments={
+                          # Specify any arguments needed based on bucket and keys (e.g. input/output S3 locations)
+                          '--job-bookmark-option': 'job-bookmark-enable',
+                          '--additional-python-modules': 'pyarrow==2,awswrangler==2.9.0,fsspec==0.7.4',
+                          # Custom arguments below
+                          '--PROCESSED_DIR': processed_dir,
+                          '--INPUT_DIR': input_dir,
+                      },
+                      MaxCapacity=2.0
+                  )
+
+                  logger.info('Response is [{}]'.format(job_response))
+
+                  # Collecting details about Glue Job after submission (e.g. jobRunId for Glue)
+                  json_data = json.loads(json.dumps(job_response, default=datetimeconverter))
+
+                  job_details = {
+                      "jobName": job_name,
+                      "jobRunId": json_data.get('JobRunId'),
+                      "jobStatus": 'STARTED',
+                      "trainUri": processed_dir+"train/train.csv",
+                      "validationUri": processed_dir+"validation/validation.csv",
+                      "testUri": processed_dir+"test/test.csv",
+                      "token": token
+                  }
+
+                  response = {
+                      'jobDetails': job_details
+                  }
+
+              except Exception as e:
+                  logger.error("Fatal error", exc_info=True)
+                  
+                  sagemaker.send_pipeline_execution_step_failure(
+                      CallbackToken=token,
+                      FailureReason="error"
+                  )
+                  
+                  raise e
+              return response
+      Role:
+        Fn::GetAtt:
+          - executegluejobfunctionServiceRole36C63F84
+          - Arn
+      Handler: index.lambda_handler
+      Runtime: python3.8
+      Timeout: 300
+    DependsOn:
+      - executegluejobfunctionServiceRoleDefaultPolicy244806D1
+      - executegluejobfunctionServiceRole36C63F84
+    Metadata:
+      aws:cdk:path: CfnStack/execute_glue_job_function/Resource
+  checkgluejobfunctionServiceRoleF920ACE5:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - Fn::Join:
+            - ""
+            - - "arn:"
+              - Ref: AWS::Partition
+              - :iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+    Metadata:
+      aws:cdk:path: CfnStack/check_glue_job_function/ServiceRole/Resource
+  checkgluejobfunctionServiceRoleDefaultPolicyBD7ECB72:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action: glue:GetJobRun
+            Effect: Allow
+            Resource: arn:aws:glue:us-east-1:822507008821:job/*
+          - Action:
+              - sagemaker:SendPipelineExecutionStepFailure
+              - sagemaker:SendPipelineExecutionStepSuccess
+            Effect: Allow
+            Resource: arn:aws:sagemaker:us-east-1:822507008821:pipeline/*
+        Version: "2012-10-17"
+      PolicyName: checkgluejobfunctionServiceRoleDefaultPolicyBD7ECB72
+      Roles:
+        - Ref: checkgluejobfunctionServiceRoleF920ACE5
+    Metadata:
+      aws:cdk:path: CfnStack/check_glue_job_function/ServiceRole/DefaultPolicy/Resource
+  checkgluejobfunction1718C3DD:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          
+          import os
+          import json
+          import boto3
+          from boto3.dynamodb.conditions import Key, Attr
+          from botocore.exceptions import ClientError
+          from decimal import Decimal
+          import time
+          import datetime as dt
+
+          import logging
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+          logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
+
+          # Create a client for the AWS Analytical service to use
+          client = boto3.client('glue')
+
+          sagemaker = boto3.client('sagemaker')
+
+          def datetimeconverter(o):
+              if isinstance(o, dt.datetime):
+                  return o.__str__()
+
+          def check_job_status(job_details):
+              # This function checks the status of the currently running job
+              job_response = client.get_job_run(JobName=job_details['jobName'], RunId=job_details['jobRunId'])
+              json_data = json.loads(json.dumps(job_response, default=datetimeconverter))
+              # IMPORTANT update the status of the job based on the job_response (e.g RUNNING, SUCCEEDED, FAILED)
+              job_details['jobStatus'] = json_data.get('JobRun').get('JobRunState')
+
+              response = {
+                  'jobDetails': job_details
+              }
+              return response
+
+          def lambda_handler(event, context):
+              """Calls custom job waiter developed by user
+
+              Arguments:
+                  event {dict} -- Dictionary with details on previous processing step
+                  context {dict} -- Dictionary with details on Lambda context
+
+              Returns:
+                  {dict} -- Dictionary with Processed Bucket, Key(s) and Job Details
+              """
+              try:
+
+                  logger.info('Lambda event is {}'.format(event))
+
+                  job_details = event['jobDetails']
+
+                  logger.info('Checking Job Status with user custom code')
+                  #transform_handler = TransformHandler().stage_transform(team, dataset, stage)
+                  response = check_job_status(job_details)  # custom user code called
+                  
+                  if response['jobDetails']['jobStatus'] == "SUCCEEDED":
+                      sagemaker.send_pipeline_execution_step_success(
+                          CallbackToken=job_details['token'],
+                          OutputParameters=[
+                              {
+                                  'Name': 'final_status',
+                                  'Value': 'Glue Job finished.',
+                              },
+                              {
+                                  'Name': 'trainUri',
+                                  'Value': job_details['trainUri'],
+                              },
+                              {
+                                  'Name': 'validationUri',
+                                  'Value': job_details['validationUri'],
+                              },
+                              {
+                                  'Name': 'testUri',
+                                  'Value': job_details['testUri'],
+                              } 
+                          ]
+                      )
+                  elif response['jobDetails']['jobStatus'] == "FAILED":
+                      sagemaker.send_pipeline_execution_step_failure(
+                          CallbackToken=job_details['token'],
+                          FailureReason="unknown reason"
+                      )
+
+                  logger.info('Response is [{}]'.format(response))
+
+              except Exception as e:
+                  logger.error("Fatal error", exc_info=True)
+                  sagemaker.send_pipeline_execution_step_failure(
+                          CallbackToken=job_details['token'],
+                          FailureReason=str(e)
+                  )
+                  
+                  raise e
+              return response
+      Role:
+        Fn::GetAtt:
+          - checkgluejobfunctionServiceRoleF920ACE5
+          - Arn
+      Handler: index.lambda_handler
+      Runtime: python3.8
+      Timeout: 300
+    DependsOn:
+      - checkgluejobfunctionServiceRoleDefaultPolicyBD7ECB72
+      - checkgluejobfunctionServiceRoleF920ACE5
+    Metadata:
+      aws:cdk:path: CfnStack/check_glue_job_function/Resource
+  PreprocessingRole847CD9CD:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                Fn::Join:
+                  - ""
+                  - - states.
+                    - Ref: AWS::Region
+                    - .amazonaws.com
+        Version: "2012-10-17"
+    Metadata:
+      aws:cdk:path: CfnStack/Preprocessing/Role/Resource
+  PreprocessingRoleDefaultPolicyE0D18857:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action: lambda:InvokeFunction
+            Effect: Allow
+            Resource:
+              - Fn::GetAtt:
+                  - checkgluejobfunction1718C3DD
+                  - Arn
+              - Fn::GetAtt:
+                  - executegluejobfunction864DA305
+                  - Arn
+              - Fn::Join:
+                  - ""
+                  - - Fn::GetAtt:
+                        - checkgluejobfunction1718C3DD
+                        - Arn
+                    - :*
+              - Fn::Join:
+                  - ""
+                  - - Fn::GetAtt:
+                        - executegluejobfunction864DA305
+                        - Arn
+                    - :*
+        Version: "2012-10-17"
+      PolicyName: PreprocessingRoleDefaultPolicyE0D18857
+      Roles:
+        - Ref: PreprocessingRole847CD9CD
+    Metadata:
+      aws:cdk:path: CfnStack/Preprocessing/Role/DefaultPolicy/Resource
+  Preprocessing329E01E4:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      RoleArn:
+        Fn::GetAtt:
+          - PreprocessingRole847CD9CD
+          - Arn
+      DefinitionString:
+        Fn::Join:
+          - ""
+          - - '{"StartAt":"execute_glue","States":{"execute_glue":{"Next":"Wait 15 seconds","Type":"Task","Resource":"'
+            - Fn::GetAtt:
+                - executegluejobfunction864DA305
+                - Arn
+            - '"},"Wait 15 seconds":{"Type":"Wait","Seconds":15,"Next":"Get Job Status"},"Get Job Status":{"Next":"Job Complete?","Type":"Task","Resource":"'
+            - Fn::GetAtt:
+                - checkgluejobfunction1718C3DD
+                - Arn
+            - '"},"Job Complete?":{"Type":"Choice","Choices":[{"Variable":"$.jobDetails.jobStatus","StringEquals":"FAILED","Next":"Job Failed"},{"Variable":"$.jobDetails.jobStatus","StringEquals":"SUCCEEDED","Next":"succeed_state"}],"Default":"Wait 15 seconds"},"Job Failed":{"Type":"Fail","Error":"DescribeJob returned FAILED","Cause":"AWS Job Failed"},"succeed_state":{"Type":"Succeed"}}}'
+    DependsOn:
+      - PreprocessingRoleDefaultPolicyE0D18857
+      - PreprocessingRole847CD9CD
+    Metadata:
+      aws:cdk:path: CfnStack/Preprocessing/Resource
+  CDKMetadata:
+    Type: AWS::CDK::Metadata
+    Properties:
+      Analytics: v2:deflate64:H4sIAAAAAAAA/01O0QrCMAz8lr1n0emD+CYM9iaMKfgcs8ritlbWFpHSf3edCj7dXZK7S4HFbo3r7EBPm3PbrwKbSWE4OeIeSqOtmzw7KG+6Udb4iVXi86IVJ0ZHSMYw0HhtCUPlNadxuvnxCEIjhsYMi3XB2gzCryQ/LIJ16nH7OiyGM9keLiRzc2dkLq1IBjh5ZqVamL9z6kjciV4y/3WMEeqX64xebXGPxSa7W5F88trJqLD54BsCnSOS+AAAAA==
+    Metadata:
+      aws:cdk:path: CfnStack/CDKMetadata/Default
+    Condition: CDKMetadataAvailable
+Conditions:
+  CDKMetadataAvailable:
+    Fn::Or:
+      - Fn::Or:
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - af-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-east-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-northeast-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-northeast-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-southeast-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-southeast-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ca-central-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - cn-north-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - cn-northwest-1
+      - Fn::Or:
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-central-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-north-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-west-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-west-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-west-3
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - me-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - sa-east-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - us-east-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - us-east-2
+      - Fn::Or:
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - us-west-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - us-west-2
+
