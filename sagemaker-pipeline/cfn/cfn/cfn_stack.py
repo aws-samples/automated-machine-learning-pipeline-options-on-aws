@@ -1,3 +1,4 @@
+from operator import concat
 from aws_cdk import (
     aws_stepfunctions as sfn,
     aws_stepfunctions_tasks as sfn_tasks,
@@ -29,7 +30,123 @@ class CfnStack(cdk.Stack):
             min_length=10,
         )
 
+        # Create SageMaker Pipeline
+        sagemaker_execution_role = aws_iam.Role.from_role_name(
+            self, "SageMakerExecutionRole", role_name=execution_role_arn.value_as_string
+        )
 
+        
+        glue_role = aws_iam.Role(self, "Role",
+            assumed_by=aws_iam.ServicePrincipal("glue.amazonaws.com"),
+            description="Glue role"
+        )
+
+        glue_role.add_to_policy(
+            aws_iam.PolicyStatement(
+                actions = ['s3:*'],
+                resources = ['arn:aws:s3:::*',]
+            )
+        )
+        
+        # Create a glue job for preprocessing
+        glue_job = glue.Job(
+            self,
+            "sagemaker-pipeline-GlueJob",
+            job_name="sagemaker-pipeline-GlueJob",
+            role=glue_role,
+            executable=glue.JobExecutable.python_etl(
+                glue_version=glue.GlueVersion.V2_0,
+                python_version=glue.PythonVersion.THREE,
+                script=glue.Code.from_asset(path="./code/glue_preprocessing.py"),
+            ),
+            description="Prepare data for SageMaker training",
+            default_arguments={
+                "--job-bookmark-option": "job-bookmark-enable",
+                "--enable-metrics": "",
+                "--additional-python-modules": "pyarrow==2,awswrangler==2.9.0,fsspec==0.7.4"
+            },
+            worker_count=10,
+            worker_type=glue.WorkerType.STANDARD,
+            max_concurrent_runs=1,
+            timeout=cdk.Duration.minutes(60),
+        )
+
+        # STEP FUNCTION
+        start_glue_job = sfn_tasks.GlueStartJobRun(
+            self,
+            "StartGlueJobTask",
+            glue_job_name=glue_job.job_name,
+            integration_pattern=sfn.IntegrationPattern.RUN_JOB,
+            result_path="$.taskresult",
+            arguments=sfn.TaskInput.from_object(
+                {
+                    '--job-bookmark-option': 'job-bookmark-enable',
+                    '--additional-python-modules': 'pyarrow==2,awswrangler==2.9.0,fsspec==0.7.4',
+                    # Custom arguments below
+                    '--TRAIN_URI': sfn.JsonPath.string_at("$.body.trainUri"),
+                    '--VALIDATION_URI': sfn.JsonPath.string_at("$.body.valUri"),
+                    '--TEST_URI': sfn.JsonPath.string_at("$.body.testUri"),
+                    '--INPUT_DIR': sfn.JsonPath.string_at("$.body.inputDir")
+                }
+            ),
+        )
+
+        send_success = sfn_tasks.CallAwsService(
+            self,
+            "SendSuccess",
+            iam_resources=[f'arn:aws:sagemaker:{my_region}:{my_acc_id}:pipeline/*'],
+            service="sagemaker",
+            action="sendPipelineExecutionStepSuccess",
+            parameters={
+                "CallbackToken.$": "$.body.token",
+                "OutputParameters": [
+                    {
+                        "Name": "trainUri",
+                        "Value.$": "$.body.trainUri"
+                    },
+                    {
+                        "Name": "valUri",
+                        "Value.$": "$.body.valUri"
+                    },
+                    {
+                        "Name": "testUri",
+                        "Value.$": "$.body.testUri"
+                    }
+                ]
+            }
+        )
+        send_failure = sfn_tasks.CallAwsService(
+            self,
+            "SendFailure",
+            iam_resources=[f'arn:aws:sagemaker:{my_region}:{my_acc_id}:pipeline/*'],
+            service="sagemaker",
+            action="sendPipelineExecutionStepFailure",
+            parameters={
+                "CallbackToken.$": "$.body.token",
+                "FailureReason": "Unknown reason"
+                },
+        )
+
+        definition = start_glue_job.add_catch(
+            send_failure,
+            result_path="$.error-info",
+        ).next(
+            sfn.Choice(self, "Job successful?")
+            .when(
+                sfn.Condition.string_equals("$.taskresult.JobRunState", "SUCCEEDED"),
+                send_success,
+            )
+            .otherwise(
+                send_failure,
+            )
+        )
+
+        state_machine = sfn.StateMachine(
+            self, "Preprocessing",
+            definition=definition,
+        )
+
+        ## Define a Lambda Functions
         with open("lambda/execute_function.py", encoding="utf8") as fp:
             lambda_exec_func_code = fp.read()
 
@@ -39,7 +156,10 @@ class CfnStack(cdk.Stack):
             code=lambda_.InlineCode(lambda_exec_func_code),
             handler="index.lambda_handler",
             timeout=cdk.Duration.seconds(300),
-            runtime=lambda_.Runtime.PYTHON_3_8
+            runtime=lambda_.Runtime.PYTHON_3_8,
+            environment={
+                "state_machine_arn": state_machine.state_machine_arn
+            }
         )
 
         # Add perms
@@ -52,116 +172,6 @@ class CfnStack(cdk.Stack):
             actions = ['sagemaker:SendPipelineExecutionStepFailure',],
             resources = [f'arn:aws:sagemaker:{my_region}:{my_acc_id}:pipeline/*',]
             ))
-        
-        lambdaFn1.add_to_role_policy(aws_iam.PolicyStatement(
-            actions = [
-                'sqs:ReceiveMessage',
-                'sqs:DeleteMessage',
-                'sqs:GetQueueAttributes'
-                ],
-            resources = [f'arn:aws:sqs:{my_region}:{my_acc_id}:*',]
-            ))
-
-        ## Start Glue Job
-        with open("lambda/execute_glue_job.py", encoding="utf8") as fp:
-            lambda_exec_glue_code = fp.read()
-        
-        lambdaFn2 = lambda_.Function(
-            self,
-            "execute_glue_job_function",
-            code=lambda_.InlineCode(lambda_exec_glue_code),
-            handler="index.lambda_handler",
-            timeout=cdk.Duration.seconds(300),
-            runtime=lambda_.Runtime.PYTHON_3_8
-        )
-
-        # Add perms
-        lambdaFn2.add_to_role_policy(aws_iam.PolicyStatement(
-            actions = ['glue:StartJobRun',],
-            resources = [f'arn:aws:glue:{my_region}:{my_acc_id}:job/*',]
-            ))
-        
-        lambdaFn2.add_to_role_policy(aws_iam.PolicyStatement(
-            actions = ['sagemaker:SendPipelineExecutionStepFailure',],
-            resources = [f'arn:aws:sagemaker:{my_region}:{my_acc_id}:pipeline/*',]
-            ))
-
-        # Create a function for checking the status of Glue job
-        with open("lambda/check_glue_job.py", encoding="utf8") as fp:
-            lambda_check_glue_code = fp.read()
-        
-        lambdaFn3 = lambda_.Function(
-            self,
-            "check_glue_job_function",
-            code=lambda_.InlineCode(lambda_check_glue_code),
-            handler="index.lambda_handler",
-            timeout=cdk.Duration.seconds(300),
-            runtime=lambda_.Runtime.PYTHON_3_8
-        )
-
-        # Add perms
-        lambdaFn3.add_to_role_policy(aws_iam.PolicyStatement(
-            actions = ['glue:GetJobRun',],
-            resources = [f'arn:aws:glue:{my_region}:{my_acc_id}:job/*',]
-            ))
-        
-        lambdaFn3.add_to_role_policy(aws_iam.PolicyStatement(
-            actions = [
-                'sagemaker:SendPipelineExecutionStepFailure',
-                'sagemaker:SendPipelineExecutionStepSuccess'
-                ],
-            resources = [f'arn:aws:sagemaker:{my_region}:{my_acc_id}:pipeline/*',]
-            ))
-
-        # Create a step functions for preprocessing with Glue
-        start_glue_job = sfn.Task(
-            self, "execute_glue",
-            task=sfn_tasks.InvokeFunction(lambdaFn2),
-        )
-
-        wait_state = sfn.Wait(
-            self, "Wait 15 seconds",
-            time=sfn.WaitTime.duration(cdk.Duration.seconds(15)),
-        )
-
-        get_status = sfn.Task(
-            self, "Get Job Status",
-            task=sfn_tasks.InvokeFunction(lambdaFn3),
-        )
-
-        is_complete = sfn.Choice(
-            self, "Job Complete?"
-        )
-        job_failed = sfn.Fail(
-            self, "Job Failed",
-            cause="AWS Job Failed",
-            error="DescribeJob returned FAILED"
-        )
-
-        job_succeeded = sfn.Succeed(
-            self, "succeed_state"
-        )
-
-        definition = start_glue_job.next(wait_state)\
-            .next(get_status)\
-            .next(is_complete
-                    .when(sfn.Condition.string_equals(
-                      "$.jobDetails.jobStatus", "FAILED"), job_failed)
-                    .when(sfn.Condition.string_equals(
-                      "$.jobDetails.jobStatus", "SUCCEEDED"), job_succeeded)
-                    .otherwise(wait_state))
-        
-        state_machine = sfn.StateMachine(
-            self, "Preprocessing",
-            definition=definition,
-        )
-
-        # Create a SQS for callbackstep in a SageMaker Pipelines
-
-        # Create SageMaker Pipeline
-        sagemaker_execution_role = aws_iam.Role.from_role_name(
-            self, "SageMakerExecutionRole", role_name=execution_role_arn.value_as_string
-        )
 
         callback_queue = sqs.Queue(
             self, "pipeline_callbacks_glue_prep",
@@ -174,50 +184,10 @@ class CfnStack(cdk.Stack):
             lambda_event_sources.SqsEventSource(callback_queue)
         )
 
-        # Create a glue job for preprocessing
-        glue_job = glue.Job(
-            self,
-            "sagemaker-pipeline-GlueJob",
-            job_name="sagemaker-pipeline-GlueJob",
-            executable=glue.JobExecutable.python_etl(
-                glue_version=glue.GlueVersion.V2_0,
-                python_version=glue.PythonVersion.THREE,
-                script=glue.Code.from_asset(path="./code/glue/glue_preprocessing.py"),
-            ),
-            description="Prepare data for SageMaker training",
-            default_arguments={
-                "--job-bookmark-option": "job-bookmark-enable",
-                "--enable-metrics": "",
-                "--additional-python-modules": "pyarrow==2,awswrangler==2.9.0,fsspec==0.7.4"
-            },
-            worker_count=2,
-            worker_type=glue.WorkerType.STANDARD,
-            max_concurrent_runs=1,
-            timeout=cdk.Duration.minutes(1),
-        )
-
-        #glue_job.add_to_role_policy(aws_iam.PolicyStatement(
-        #    actions = ['sagemaker:SendPipelineExecutionStepFailure',],
-        #    resources = [f'arn:aws:sagemaker:{my_region}:{my_acc_id}:pipeline/*',]
-        #    ))
-
         cdk.CfnOutput(
             self,
             "SqsURL",
             value=callback_queue.queue_url,
             export_name="SM-Pipeline-SQS-URL",
         )
-
-        cdk.CfnOutput(
-            self,
-            "StatesArn",
-            value=state_machine.state_machine_arn,
-            export_name="SM-Pipeline-States-ARN",
-        )
-
-        cdk.CfnOutput(
-            self,
-            "GlueJobName",
-            value=glue_job.job_name,
-            export_name="SM-Pipeline-Glue-Name",
-        )
+        

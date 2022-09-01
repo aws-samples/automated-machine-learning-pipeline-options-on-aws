@@ -13,14 +13,13 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
-# Retrieve state machine ARN
-#sm_arn = os.environ['state_machine_arn']
-
 # Create a client for the AWS Analytical service to use
 client = boto3.client('stepfunctions')
 
 sagemaker = boto3.client('sagemaker')
 s3 = boto3.client('s3')
+
+sm_arn = os.environ["state_machine_arn"]
 
 def datetimeconverter(o):
     if isinstance(o, dt.datetime):
@@ -50,13 +49,12 @@ def lambda_handler(event, context):
         # Other parameters can be dynamically retrieved
         for record in event['Records']:
             payload = json.loads(record["body"])
-            print('payload: ', payload)
             token = payload["token"]
             arguments = payload["arguments"]
-            target_job = arguments["targetJob"]
-            processed_dir = arguments["processedDir"]
+            trainUri = arguments["trainUri"]
+            valUri = arguments["valUri"]
+            testUri = arguments["testUri"]
             input_dir = arguments['inputDir']
-            sm_arn = arguments["stateMachineArn"]
             
             logger.info('Trigger execution of state machine [{}]'.format(sm_arn))
 
@@ -64,8 +62,9 @@ def lambda_handler(event, context):
             message = {
                 'statusCode': 200,
                 'body': {
-                    "targetJob": target_job,
-                    "processedDir": processed_dir,
+                    "trainUri": trainUri,
+                    "valUri": valUri,
+                    "testUri": testUri,
                     'inputDir': input_dir,
                     "token": token
                 }

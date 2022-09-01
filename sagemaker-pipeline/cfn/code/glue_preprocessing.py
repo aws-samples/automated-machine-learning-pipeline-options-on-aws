@@ -14,10 +14,13 @@ sc = SparkContext()
 glueContext = GlueContext(sc)
 spark = glueContext.spark_session
 job = Job(glueContext)
-args = getResolvedOptions(sys.argv, ['JOB_NAME', 'PROCESSED_DIR', 'INPUT_DIR'])
+args = getResolvedOptions(sys.argv, ['JOB_NAME', 'TRAIN_URI', 'VALIDATION_URI', 'TEST_URI', 'INPUT_DIR'])
 
-processed_dir = args['PROCESSED_DIR']
+#processed_dir = args['PROCESSED_DIR']
 input_dir = args['INPUT_DIR']
+train_uri = args['TRAIN_URI']
+val_uri = args['VALIDATION_URI']
+test_uri = args['TEST_URI']
 
 job.init(args['JOB_NAME'], args)
 
@@ -144,12 +147,12 @@ test_df = val.sample(frac=0.05, axis=0)
 val_df = val.drop(index=test_df.index)
 
 
-train_dir=processed_dir+"train/train.csv"
-val_dir=processed_dir+"validation/validation.csv"
-test_dir=processed_dir+"test/test.csv"
+#train_dir=processed_dir+"train/train.csv"
+#val_dir=processed_dir+"validation/validation.csv"
+#test_dir=processed_dir+"test/test.csv"
 
-train_df.to_csv(train_dir, index=False, line_terminator="")
-val_df.to_csv(val_dir, index=False, header=False, line_terminator="")
-test_df.to_csv(test_dir, index=False, header=False, line_terminator="")
+train_df.to_csv(train_uri, index=False, line_terminator="")
+val_df.to_csv(val_uri, index=False, header=False, line_terminator="")
+test_df.to_csv(test_uri, index=False, header=False, line_terminator="")
 
 job.commit()
