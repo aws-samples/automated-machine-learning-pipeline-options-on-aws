@@ -34,7 +34,6 @@ class CfnStack(cdk.Stack):
         sagemaker_execution_role = aws_iam.Role.from_role_name(
             self, "SageMakerExecutionRole", role_name=execution_role_arn.value_as_string
         )
-
         
         glue_role = aws_iam.Role(self, "Role",
             assumed_by=aws_iam.ServicePrincipal("glue.amazonaws.com"),
