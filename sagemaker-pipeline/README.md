@@ -5,7 +5,7 @@ Amazon SageMaker Model Building Pipelines offers machine learning (ML) applicati
 The SageMaker Pipelines service supports a SageMaker Pipeline domain specific language (DSL), which is a declarative JSON specification. This DSL defines a directed acyclic graph (DAG) of pipeline parameters and SageMaker job steps. The SageMaker Python Software Developer Kit (SDK) streamlines the generation of the pipeline DSL using constructs that engineers and scientists are already familiar with.
 
 ## ML workflow with SageMaker Pipelines
-The pipeline that you create follows a typical machine learning (ML) application pattern of preprocessing, training, evaluation, model creation, model registration, batch transform and endpoint deployment.
+The pipeline that you create follows a typical machine learning (ML) application pattern of preprocessing, training, evaluation, model creation, model registration and endpoint deployment.
 
 <div align="center">
     <img width=600 src="images/mlworkflow.png"><figcaption>ML workflow with SageMaker Pipeline</figcaption>
