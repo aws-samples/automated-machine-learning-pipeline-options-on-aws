@@ -192,4 +192,10 @@ class CfnStack(cdk.Stack):
             )
         )
 
+        cdk.CfnOutput(
+            self,
+            "sfn-pipeline-arn",
+            value=state_machine.state_machine_arn,
+            export_name="sfn-pipeline-arn",
+        )
 

@@ -47,6 +47,30 @@ To add additional dependencies, for example other CDK libraries, just add
 them to your `setup.py` file and rerun the `pip install -r requirements.txt`
 command.
 
+We define 2 parameters in the CDK code, we can deploy CDK application with the following code
+```
+cdk deploy --StepFunctionsDataScienceStack --parameters BucketName={your bucket name} --parameters Prefix={prefix}
+```
+We can see the arn of Step Functions we create in the outputs followed by the above command. In Step Functions console, we select the Step Functions we created and create a execution with the input parameters as below.
+```json
+{
+    "TrainInstanceType": "ml.m5.xlarge",
+    "TrainJobName": "stepfunctionsTraining4",
+    "hyperparameters": {
+        "max_depth":"5",
+        "eta":"0.2",
+        "gamma":"4",
+        "min_child_weight":"6",
+        "subsample":"0.8",
+        "silent":"0",
+        "objective": "binary:logistic",
+        "num_round": "100",
+        "eval_metric": "auc"
+    }
+}
+```
+
+
 ## Useful commands
 
  * `cdk ls`          list all stacks in the app
