@@ -43,7 +43,7 @@ class CfnStack(cdk.Stack):
             bucket_name.value_as_string
         )
 
-        glue_role = aws_iam.Role(self, "Role",
+        glue_role = aws_iam.Role(self, "GlueRole",
             assumed_by=aws_iam.ServicePrincipal("glue.amazonaws.com"),
             description="Glue role"
         )
@@ -122,12 +122,16 @@ class CfnStack(cdk.Stack):
             py_version="py3",
         )
 
+        # TrainingJob
+        model_prefix = f"{prefix.value_as_string}/model"
+        training_job_name = sfn.JsonPath.string_at("$.TrainJobName")
         train_task = sfn_tasks.SageMakerCreateTrainingJob(self, "TrainSagemaker",
-            training_job_name=sfn.JsonPath.string_at("$.TrainJobName"),
+            training_job_name=training_job_name,
             algorithm_specification=sfn_tasks.AlgorithmSpecification(
                 training_input_mode=sfn_tasks.InputMode.FILE,
                 training_image=sfn_tasks.DockerImage.from_registry(image_uri),
             ),
+            integration_pattern=sfn.IntegrationPattern.RUN_JOB,
             input_data_config=[
                 sfn_tasks.Channel(
                     channel_name="train",
@@ -153,7 +157,7 @@ class CfnStack(cdk.Stack):
             output_data_config=sfn_tasks.OutputDataConfig(
                 s3_output_location=sfn_tasks.S3Location.from_bucket(
                     artifact_bucket,
-                    f"{prefix.value_as_string}/model"
+                    model_prefix
                 )
             ),
             resource_config=sfn_tasks.ResourceConfig(
@@ -174,11 +178,23 @@ class CfnStack(cdk.Stack):
                 "objective": sfn.JsonPath.string_at("$.hyperparameters.objective"),
                 "num_round": sfn.JsonPath.string_at("$.hyperparameters.num_round"),
                 "eval_metric": sfn.JsonPath.string_at("$.hyperparameters.eval_metric")
-            }
+            },
+        )
+
+        # Create a model
+        create_model_task = sfn_tasks.SageMakerCreateModel(self, "CreateModel",
+            model_name=sfn.JsonPath.string_at("$.TrainingJobName"),
+            primary_container=sfn_tasks.ContainerDefinition(
+                image=sfn_tasks.DockerImage.from_registry(image_uri),
+                mode=sfn_tasks.Mode.SINGLE_MODEL,
+                model_s3_location=sfn_tasks.S3Location.from_json_expression("$.ModelArtifacts.S3ModelArtifacts")
+            )
         )
 
         definition = start_glue_job.next(
             train_task
+        ).next(
+            create_model_task
         )
         
         state_machine = sfn.StateMachine(
