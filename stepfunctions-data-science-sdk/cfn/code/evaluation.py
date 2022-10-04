@@ -1,3 +1,4 @@
+print('evaluation....')
 import json
 import os
 import tarfile
@@ -18,14 +19,32 @@ from sklearn.metrics import (
     roc_curve,
 )
 import logging
+import boto3
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler())
 
+s3_client = boto3.client('s3')
+
 if __name__ == "__main__":
-    model_path = os.path.join("/opt/ml/processing/model", "model.tar.gz")
+    model_artifacts_url = json.loads(os.environ['model_url'])['uri']
+    print('model_artifacts_url: ', model_artifacts_url)
+    model_artifacts_bucket = model_artifacts_url.split('/')[3]
+    model_artifacts_key = model_artifacts_url.split('/')[4:]
+    model_artifacts_key = '/'.join(model_artifacts_key)
+
+    print(model_artifacts_bucket, model_artifacts_key)
+
+    model_dir = "/opt/ml/processing/model"
+    if not os.path.exists(model_dir):
+        os.makedirs(model_dir)
+
+    model_path = os.path.join(model_dir, "model.tar.gz")
+
+    s3_client.download_file(model_artifacts_bucket, model_artifacts_key, model_path)
     print("Extracting model from path: {}".format(model_path))
+
     with tarfile.open(model_path) as tar:
         tar.extractall(path=".")
     

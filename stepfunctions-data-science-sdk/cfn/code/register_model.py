@@ -4,7 +4,10 @@ import logging
 sm_client = boto3.client('sagemaker')
 
 def lambda_handler(event, context):
-    model_uri = event["S3ModelArtifacts"]
+    training_name = event["TrainingJobName"]
+    training_desc = sm_client.describe_training_job(TrainingJobName=training_name)
+    model_uri = training_desc['ModelArtifacts']['S3ModelArtifacts']
+
     image_uri = event["ImageUri"]
     model_package_group_name = event["ModelPackageGroupName"]
     

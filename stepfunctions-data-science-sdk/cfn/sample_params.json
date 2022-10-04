@@ -1,15 +1,15 @@
 {
-    "TrainInstanceType": "ml.m5.xlarge",
-    "TrainJobName": "stepfunctionsTraining4",
-    "hyperparameters": {
-        "max_depth":"5",
-        "eta":"0.2",
-        "gamma":"4",
-        "min_child_weight":"6",
-        "subsample":"0.8",
-        "silent":"0",
-        "objective": "binary:logistic",
-        "num_round": "100",
-        "eval_metric": "auc"
-    }
+  "TrainInstanceType": "ml.m5.xlarge",
+  "RunJobName": "stepfunctionsTraining148",
+  "hyperparameters": {
+    "max_depth": "5",
+    "eta": "0.2",
+    "gamma": "4",
+    "min_child_weight": "6",
+    "subsample": "0.8",
+    "silent": "0",
+    "objective": "binary:logistic",
+    "num_round": "100",
+    "eval_metric": "auc"
   }
+}

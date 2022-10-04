@@ -10,6 +10,7 @@ s3_client = boto3.client('s3')
 
 # Retrieve transform job name from event and return transform job status.
 def lambda_handler(event, context):
+    print(event)
     eval_res = event["EvaluationResult"]
     eval_s3uri = f"{eval_res}evaluation.json"
     
@@ -24,4 +25,6 @@ def lambda_handler(event, context):
     return {
         "statusCode": 200,
         "trainingMetrics": s3clientlist["binary_classification_metrics"]["accuracy"]["value"],
-        "S3ModelArtifacts": event["S3ModelArtifacts"]}
+        "RunJobName": event["RunJobName"],
+        "trainTaskResult": event["trainTaskResult"]
+    }
