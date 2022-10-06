@@ -206,17 +206,6 @@ class CfnStack(cdk.Stack):
         sm_role = train_task.role
         sm_role.add_to_policy(
             aws_iam.PolicyStatement(
-                actions = [
-                    "logs:*",
-                ],
-                resources = [
-                    f'arn:aws:logs:{my_region}:{my_acc_id}:log-group:/aws/*',
-                ]
-            )
-        )
-        
-        sm_role.add_to_policy(
-            aws_iam.PolicyStatement(
                 actions = ['s3:ListBucket', 's3:*Object'],
                 resources = [
                     f'arn:aws:s3:::{bucket_name.value_as_string}',
@@ -395,10 +384,50 @@ class CfnStack(cdk.Stack):
         # Add perms
         registry_model_lambda.add_to_role_policy(aws_iam.PolicyStatement(
             actions = [
-                'sagemaker:*'
+                'sagemaker:ListModelPackageGroups'
+            ],
+            resources = ["*"]
+        ))
+
+        registry_model_lambda.add_to_role_policy(aws_iam.PolicyStatement(
+            actions = [
+                'sagemaker:CreateModelPackageGroup'
             ],
             resources = [
-                f'arn:aws:sagemaker:{my_region}:{my_acc_id}:*'
+                f"arn:aws:sagemaker:{my_region}:{my_acc_id}:model-package-group/*"
+            ]
+        ))
+
+        registry_model_lambda.add_to_role_policy(aws_iam.PolicyStatement(
+            actions = [
+                'sagemaker:CreateModelPackage',
+            ],
+            resources = [
+                f"arn:aws:sagemaker:{my_region}:{my_acc_id}:model-package/*",
+            ]
+        ))
+
+        registry_model_lambda.add_to_role_policy(aws_iam.PolicyStatement(
+            actions = ['s3:ListBucket', 's3:*Object'],
+            resources = [
+                f'arn:aws:s3:::{bucket_name.value_as_string}',
+                f'arn:aws:s3:::{bucket_name.value_as_string}/*',
+            ]
+        ))
+
+        registry_model_lambda.add_to_role_policy(aws_iam.PolicyStatement(
+            actions = ['ecr:*'],
+            resources = [
+                "*"
+            ]
+        ))
+
+        registry_model_lambda.add_to_role_policy(aws_iam.PolicyStatement(
+            actions = [
+                'sagemaker:DescribeTrainingJob'
+            ],
+            resources = [
+                f"arn:aws:sagemaker:{my_region}:{my_acc_id}:training-job/*"
             ]
         ))
 
