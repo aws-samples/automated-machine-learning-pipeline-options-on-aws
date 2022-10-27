@@ -184,17 +184,6 @@ class CfnStack(cdk.Stack):
             }
         )
 
-        # Create a model
-        """
-        create_model_task = sfn_tasks.SageMakerCreateModel(self, "CreateModel",
-            model_name=sfn.JsonPath.string_at("$.TrainingJobName"),
-            primary_container=sfn_tasks.ContainerDefinition(
-                image=sfn_tasks.DockerImage.from_registry(image_uri),
-                mode=sfn_tasks.Mode.SINGLE_MODEL,
-                model_s3_location=sfn_tasks.S3Location.from_json_expression("$.ModelArtifacts.S3ModelArtifacts")
-            )
-        )
-        """
         # Create evaluation step
         code_key = f'{prefix.value_as_string}/code'
         deployment = s3deploy.BucketDeployment(self, 'DeployWebsite',
@@ -443,6 +432,34 @@ class CfnStack(cdk.Stack):
                 }
             ),
         )
+#Create a model
+    
+        create_model_task = sfn_tasks.SageMakerCreateModel(self, "CreateModel",
+         	 model_name="my_model",
+           	 primary_container=sfn_tasks.ContainerDefinition(
+               	 image=sfn_tasks.DockerImage.from_registry("$.Model.imageName"),
+                	mode=sfn_tasks.Mode.SINGLE_MODEL,
+                	model_s3_location=sfn_tasks.S3Location.from_json_expression("$.ModelArtifacts.S3ModelArtifacts")
+                 )
+            )
+        
+#endpoint configuration
+        endpoint_configuration_task= sfn_tasks.SageMakerCreateEndpointConfig(self, "SagemakerEndpointConfig",
+	           	endpoint_config_name="MyEndpointConfig",
+                production_variants=[sfn_tasks.ProductionVariant(
+                initial_instance_count=1,
+                instance_type=ec2.InstanceType.of(ec2.InstanceClass.M5, ec2.InstanceSize.XLARGE),
+                model_name=sfn.JsonPath.string_at("$.create_model_task.model_name"),
+                variant_name="awesome-variant"
+            )]
+        )
+        
+#create endpoint
+        endpoint_creation_task= sfn_tasks.SageMakerCreateEndpoint(self, "SagemakerEndpoint",
+	     	endpoint_name=sfn.JsonPath.string_at("$.EndpointName"),
+        	endpoint_config_name=sfn.JsonPath.string_at("$.MyEndpointConfig")
+        	)
+
 
         definition = start_glue_job.next(
             train_task
@@ -459,7 +476,10 @@ class CfnStack(cdk.Stack):
                     sfn.Condition.string_equals("$.ProcessingJobStatus", "Completed"), query_eval_task
                     .next(
                         check_evaluation.when(
-                             sfn.Condition.number_greater_than_equals("$.trainingMetrics", 0.9), register_model_task
+                             sfn.Condition.number_greater_than_equals("$.trainingMetrics", 0.9), (register_model_task
+                                                                                                    .next(create_model_task
+                                                                                                ).next(endpoint_configuration_task
+                                                                                                ).next(endpoint_creation_task))
                         ).otherwise(
                             accuracy_fail_step
                         )
