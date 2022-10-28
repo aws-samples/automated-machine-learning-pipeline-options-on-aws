@@ -435,11 +435,11 @@ class CfnStack(cdk.Stack):
 #Create a model
     
         create_model_task = sfn_tasks.SageMakerCreateModel(self, "CreateModel",
-         	 model_name="my_model",
+         	 model_name="$.model_name",
            	 primary_container=sfn_tasks.ContainerDefinition(
-               	 image=sfn_tasks.DockerImage.from_registry("$.Model.imageName"),
+               	 image=sfn_tasks.DockerImage.from_registry(image_uri),
                 	mode=sfn_tasks.Mode.SINGLE_MODEL,
-                	model_s3_location=sfn_tasks.S3Location.from_json_expression("$.ModelArtifacts.S3ModelArtifacts")
+                	model_s3_location=sfn_tasks.S3Location.from_json_expression("$.trainTaskResult.ModelArtifacts.S3ModelArtifacts")
                  )
             )
         
@@ -449,7 +449,7 @@ class CfnStack(cdk.Stack):
                 production_variants=[sfn_tasks.ProductionVariant(
                 initial_instance_count=1,
                 instance_type=ec2.InstanceType.of(ec2.InstanceClass.M5, ec2.InstanceSize.XLARGE),
-                model_name=sfn.JsonPath.string_at("$.create_model_task.model_name"),
+                model_name=sfn.JsonPath.string_at("$.model_name"),
                 variant_name="awesome-variant"
             )]
         )
