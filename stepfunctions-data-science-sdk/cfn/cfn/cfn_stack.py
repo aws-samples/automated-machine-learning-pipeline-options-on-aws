@@ -430,36 +430,39 @@ class CfnStack(cdk.Stack):
                     "TrainingJobName": sfn.JsonPath.string_at("$.trainTaskResult.TrainingJobName"),
                     "ModelPackageGroupName": sfn.JsonPath.string_at("$.RunJobName")
                 }
-            ),
+            )
         )
 #Create a model
     
         create_model_task = sfn_tasks.SageMakerCreateModel(self, "CreateModel",
-         	 model_name="my_model",
-           	 primary_container=sfn_tasks.ContainerDefinition(
-               	 image=sfn_tasks.DockerImage.from_registry("$.Model.imageName"),
-                	mode=sfn_tasks.Mode.SINGLE_MODEL,
-                	model_s3_location=sfn_tasks.S3Location.from_json_expression("$.ModelArtifacts.S3ModelArtifacts")
-                 )
+         	    model_name=sfn.JsonPath.string_at("$.TrainingJobName"),
+           	    primary_container=sfn_tasks.ContainerDefinition(
+               	    image=sfn_tasks.DockerImage.from_registry(image_uri),
+                    mode=sfn_tasks.Mode.SINGLE_MODEL,
+                    model_s3_location=sfn_tasks.S3Location.from_json_expression("$.ModelArtifacts.S3ModelArtifacts")
+                ),
+                result_path="$.taskResult"
             )
         
 #endpoint configuration
         endpoint_configuration_task= sfn_tasks.SageMakerCreateEndpointConfig(self, "SagemakerEndpointConfig",
-	           	endpoint_config_name="MyEndpointConfig",
-                production_variants=[sfn_tasks.ProductionVariant(
-                initial_instance_count=1,
-                instance_type=ec2.InstanceType.of(ec2.InstanceClass.M5, ec2.InstanceSize.XLARGE),
-                model_name=sfn.JsonPath.string_at("$.create_model_task.model_name"),
-                variant_name="awesome-variant"
-            )]
+	           	endpoint_config_name=sfn.JsonPath.string_at("$.TrainingJobName"),
+                production_variants=[
+                    sfn_tasks.ProductionVariant(
+                        initial_instance_count=1,
+                        instance_type=ec2.InstanceType.of(ec2.InstanceClass.M4, ec2.InstanceSize.XLARGE),
+                        model_name=sfn.JsonPath.string_at("$.TrainingJobName"),
+                        variant_name="test-variant"
+                    )
+                ],
+                result_path="$.ConfTaskResult"
         )
         
 #create endpoint
         endpoint_creation_task= sfn_tasks.SageMakerCreateEndpoint(self, "SagemakerEndpoint",
-	     	endpoint_name=sfn.JsonPath.string_at("$.EndpointName"),
-        	endpoint_config_name=sfn.JsonPath.string_at("$.MyEndpointConfig")
-        	)
-
+	     	endpoint_name=sfn.JsonPath.string_at("$.TrainingJobName"),
+        	endpoint_config_name=sfn.JsonPath.string_at("$.TrainingJobName")
+        )
 
         definition = start_glue_job.next(
             train_task
