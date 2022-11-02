@@ -56,6 +56,13 @@ def lambda_handler(event, context):
         create_model_package_response = sm_client.create_model_package(**create_model_package_input_dict)
         model_package_arn = create_model_package_response["ModelPackageArn"]
 
-        return {"statusCode": 200, "modelPackageArn": model_package_arn}
+        return {
+            "statusCode": 200,
+            "modelPackageArn": model_package_arn,
+            "ModelArtifacts": {
+                "S3ModelArtifacts": model_uri
+            },
+            "TrainingJobName": training_name
+        }
     except Exception as e:
         return {"statusCode": 400, "Error": f"model registery failed! {e}"}
