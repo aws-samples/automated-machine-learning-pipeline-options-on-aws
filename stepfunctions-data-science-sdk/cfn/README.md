@@ -1,8 +1,7 @@
 
-# Welcome to your CDK Python project!
+# Deploy a machine learning pipeline with AWS Step Functions Data Science SDK
 
-This is a blank project for CDK development with Python.
-
+## CDK development environment setting
 The `cdk.json` file tells the CDK Toolkit how to execute your app.
 
 This project is set up like a standard Python project.  The initialization
@@ -37,6 +36,7 @@ Once the virtualenv is activated, you can install the required dependencies.
 $ pip install -r requirements.txt
 ```
 
+## Deploy a Step Function Pipeline
 At this point you can now synthesize the CloudFormation template for this code.
 
 ```
@@ -47,22 +47,34 @@ To add additional dependencies, for example other CDK libraries, just add
 them to your `setup.py` file and rerun the `pip install -r requirements.txt`
 command.
 
-We define 2 parameters in the CDK code, we can deploy CDK application with the following code
+We define 2 parameters in the CDK code, and deploy CDK application with the following code.
+- `bucket_name` is the existing S3 Bucket in your account and region should be the same region as your CDK environment.
+- `prefix` is the existing directory in `bucket_name`
+
 ```
-cdk deploy --StepFunctionsDataScienceStack --parameters BucketName={your bucket name} --parameters Prefix={prefix}
+cdk deploy --StepFunctionsDataScienceStack --parameters BucketName={bucket_name} --parameters Prefix={prefix}
 ```
-We can see the arn of Step Functions we create in the outputs followed by the above command. In Step Functions console, we select the Step Functions we created and create a execution with the input parameters as below.
+We can see the arn of Step Functions we create in the outputs followed by the above command.
+
+## Data preparation
+Once you succeed to deploy Step Functions pipe, upload the sample data to the S3 Bucket (`bucket_name` and `prefix` are same as we used in `cdk deploy`).
+```bash
+aws s3 cp {project_root}/data/churn_processed.csv s3://{bucket_name}/{prefix}/input/churn_processed.csv
+```
+
+## Run Step Functions Pipeline
+In Step Functions console, we select the Step Functions we created and create a execution with the input parameters as below. Note that we need to use different `RunJobName` each time when executing the Step Function Pipelines.
 ```json
 {
     "TrainInstanceType": "ml.m5.xlarge",
-    "TrainJobName": "stepfunctionsTraining4",
+    "RunJobName": "stepfunctionsTraining148",
     "hyperparameters": {
-        "max_depth":"5",
-        "eta":"0.2",
-        "gamma":"4",
-        "min_child_weight":"6",
-        "subsample":"0.8",
-        "silent":"0",
+        "max_depth": "5",
+        "eta": "0.2",
+        "gamma": "4",
+        "min_child_weight": "6",
+        "subsample": "0.8",
+        "silent": "0",
         "objective": "binary:logistic",
         "num_round": "100",
         "eval_metric": "auc"
@@ -70,7 +82,10 @@ We can see the arn of Step Functions we create in the outputs followed by the ab
 }
 ```
 
+## Check the real-time inference endpoint
+Once the pipeline is finished, you can check the real-time inference endpoint created by the step function pipeline in SageMaker console.
 
+---
 ## Useful commands
 
  * `cdk ls`          list all stacks in the app
@@ -79,4 +94,3 @@ We can see the arn of Step Functions we create in the outputs followed by the ab
  * `cdk diff`        compare deployed stack with current state
  * `cdk docs`        open CDK documentation
 
-Enjoy!
