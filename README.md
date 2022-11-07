@@ -24,7 +24,7 @@ Next step is a conditional step that embeds three steps if the model performance
 
 These steps are shown in the following graph: 
 ```
-![Machine Learning workflow](https://github.com/aws-samples/automated-machine-learning-pipeline-options-on-aws/images/img1.png)
+[Machine Learning workflow](https://github.com/aws-samples/automated-machine-learning-pipeline-options-on-aws/images/img1.png)
 ```
 You can find each of the workflow detailed description in their relevant folder.
 
