@@ -24,9 +24,9 @@ class CfnStack(cdk.Stack):
 
         execution_role_arn = cdk.CfnParameter(
             self,
-            "ExecutionRoleArn",
+            "ExecutionRoleName",
             type="String",
-            description="the arn of execution role for a SageMaker Pipeline",
+            description="the name of execution role for a SageMaker Pipeline",
             min_length=10,
         )
 
